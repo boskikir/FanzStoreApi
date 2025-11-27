@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Verify OTP — FanzStore Dev</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0f1724;
+    --panel: rgba(17,24,39,0.9);
+    --muted: #9ca3af;
+    --accent-from: #4f46e5;
+    --accent-to: #6366f1;
+    --success: #16a34a;
+    --danger: #ef4444;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    padding:20px;
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background: linear-gradient(160deg,var(--bg),#071024);
+    color:#e6edf3;
+    font-family: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+  }
+  .card{
+    width:100%;
+    max-width:520px;
+    background:var(--panel);
+    padding:20px;
+    border-radius:12px;
+    box-shadow:0 12px 40px rgba(2,6,23,0.6);
+    border:1px solid rgba(255,255,255,0.03);
+  }
+  h2{ margin:0 0 10px; font-size:20px; text-align:left; font-weight:600; }
+  p.lead{ margin:6px 0 16px; color:var(--muted); font-size:14px; }
+
+  label{ display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
+  .input-field{
+    width:100%;
+    padding:12px 14px;
+    border-radius:10px;
+    border:1px solid rgba(255,255,255,0.04);
+    background:rgba(255,255,255,0.02);
+    color:#fff;
+    font-size:15px;
+    outline:none;
+  }
+  .input-field:focus{ box-shadow:0 10px 30px rgba(99,102,241,0.08); border-color:var(--accent-to); }
+
+  .row{ margin-bottom:12px; }
+  .muted-small{ font-size:13px; color:var(--muted); }
+
+  .btn {
+    display:inline-block;
+    padding:10px 14px;
+    border-radius:10px;
+    border:0;
+    cursor:pointer;
+    font-weight:600;
+    font-size:14px;
+  }
+  .btn-primary{
+    background: linear-gradient(135deg,var(--accent-from),var(--accent-to));
+    color:#fff;
+  }
+  .btn-secondary{
+    background:transparent;
+    color:var(--muted);
+    border:1px solid rgba(255,255,255,0.04);
+  }
+  .btn:disabled{ opacity:0.6; cursor:not-allowed; }
+
+  .controls{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .hint{ font-size:13px; color:var(--muted); margin-top:8px; }
+
+  #msg{ margin-top:12px; min-height:22px; text-align:left; font-size:14px; }
+
+  @media (max-width:520px){
+    .card{ padding:16px; border-radius:10px; }
+  }
+</style>
+</head>
+<body>
+  <div class="card" role="main">
+    <h2>Verifikasi Email (OTP)</h2>
+    <p class="lead">Masukkan kode 6-digit yang dikirim ke email kamu. Tombol kirim ulang memiliki cooldown bertahap.</p>
+
+    <form id="otpForm" novalidate>
+      <!-- email: tampil tapi read-only (otomatis diisi) -->
+      <div class="row">
+        <label>Email</label>
+        <input id="email" class="input-field" type="email" readonly />
+        <div class="muted-small">Email diisi otomatis dari proses registrasi.</div>
+      </div>
+
+      <div class="row">
+        <label>OTP (6 digit)</label>
+        <input id="otp" class="input-field" inputmode="numeric" pattern="\d{6}" placeholder="123456" maxlength="6" autocomplete="one-time-code" />
+      </div>
+
+      <div class="row controls">
+        <button id="verifyBtn" class="btn btn-primary" type="submit">Verify</button>
+        <button id="resendBtn" type="button" class="btn btn-secondary">Kirim Ulang OTP</button>
+        <div id="cooldownInfo" class="muted-small" style="margin-left:auto"></div>
+      </div>
+
+      <div id="msg" aria-live="polite"></div>
+      <div class="hint">Jika tidak menerima email, cek folder spam atau tunggu sampai cooldown selesai, lalu coba kirim ulang.</div>
+    </form>
+  </div>
+
+<script>
+/*
+  Behavior:
+  - Email diambil dari localStorage 'pending_email' atau query ?email=
+  - Resend cooldown sequence: [60, 300, ...] (60s, 300s, then double each step)
+  - Cooldown state persisted per email via localStorage key 'otp_cooldown::<email>'
+  - Verify sends { email, code } to /auth/verify-otp
+  - Send OTP sends { email } to /auth/send-otp
+  - OTP expiry on server assumed 2 minutes (but server determines actual expiry)
+*/
+
+const emailInput = document.getElementById('email');
+const otpInput = document.getElementById('otp');
+const resendBtn = document.getElementById('resendBtn');
+const verifyBtn = document.getElementById('verifyBtn');
+const msgEl = document.getElementById('msg');
+const cooldownInfo = document.getElementById('cooldownInfo');
+
+function getEmailFromEnv(){
+  const q = new URLSearchParams(location.search);
+  const fromQ = q.get('email');
+  const fromLocal = localStorage.getItem('pending_email');
+  if (fromQ && fromQ.trim()) return fromQ.trim();
+  if (fromLocal && fromLocal.trim()) return fromLocal.trim();
+  return '';
+}
+
+function setMsg(text, color){
+  msgEl.textContent = text || '';
+  msgEl.style.color = color || 'inherit';
+}
+
+// cooldown storage helpers
+function cooldownKey(email){ return 'otp_cooldown::' + email; }
+
+function readCooldown(email){
+  try {
+    const raw = localStorage.getItem(cooldownKey(email));
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch(e){ return null; }
+}
+function writeCooldown(email, obj){
+  try { localStorage.setItem(cooldownKey(email), JSON.stringify(obj)); } catch(e){}
+}
+function clearCooldown(email){
+  try { localStorage.removeItem(cooldownKey(email)); } catch(e){}
+}
+
+// cooldown sequence: first attempt -> 60s, second -> 300s (5m), subsequent -> double previous after idx>=2
+function getCooldownDurationForAttempt(attemptIndex){
+  // attemptIndex starts at 0 (first resend) -> 60
+  if (attemptIndex <= 0) return 60;
+  if (attemptIndex === 1) return 300;
+  // attemptIndex >=2: double each time starting from 600
+  const base = 600; // 10 minutes for attemptIndex=2? we will produce progressive doubling from 600
+  return base * Math.pow(2, attemptIndex - 2);
+}
+
+// initialize email field
+const email = getEmailFromEnv();
+emailInput.value = email;
+if (!email) {
+  setMsg('Email tidak ditemukan — kembali ke halaman register.', 'crimson');
+  resendBtn.disabled = true;
+  verifyBtn.disabled = true;
+}
+
+// manage countdown timer
+let countdownTimer = null;
+function startCountdown(email) {
+  const cd = readCooldown(email);
+  if (!cd || !cd.until) { updateCooldownUI(null); return; }
+
+  const update = () => {
+    const now = Date.now();
+    const remaining = Math.max(0, Math.floor((cd.until - now) / 1000));
+    if (remaining <= 0) {
+      // expired cooldown
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+      // enable button
+      resendBtn.disabled = false;
+      updateCooldownUI(null);
+      return;
+    }
+    // disable resend and show time
+    resendBtn.disabled = true;
+    updateCooldownUI(remaining);
+  };
+
+  // clear previous
+  if (countdownTimer) clearInterval(countdownTimer);
+  update(); // immediate
+  countdownTimer = setInterval(update, 1000);
+}
+
+function updateCooldownUI(remainingSeconds){
+  if (remainingSeconds == null) {
+    cooldownInfo.textContent = '';
+    resendBtn.textContent = 'Kirim Ulang OTP';
+    resendBtn.disabled = false;
+    return;
+  }
+  // format mm:ss or "1m" if > 60m
+  const m = Math.floor(remainingSeconds / 60);
+  const s = remainingSeconds % 60;
+  const label = (m > 0) ? `${m}m ${String(s).padStart(2,'0')}s` : `${s}s`;
+  resendBtn.textContent = `Kirim Ulang (${label})`;
+  cooldownInfo.textContent = `Cooldown aktif • sisa ${label}`;
+}
+
+// on page load, if cooldown present, start
+if (email) {
+  const cd = readCooldown(email);
+  if (cd && cd.until && cd.until > Date.now()) {
+    startCountdown(email);
+  } else {
+    updateCooldownUI(null);
+  }
+}
+
+// click resend handler
+resendBtn.addEventListener('click', async ()=>{
+  if (!email) { setMsg('Email tidak tersedia', 'crimson'); return; }
+
+  // check cooldown
+  const cd = readCooldown(email);
+  if (cd && cd.until && cd.until > Date.now()) {
+    setMsg('Masih dalam cooldown, tunggu sampai tombol dapat dipencet lagi.', 'crimson');
+    startCountdown(email);
+    return;
+  }
+
+  setMsg('Mengirim OTP...', 'black');
+  resendBtn.disabled = true;
+
+  try {
+    const r = await fetch('/auth/send-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const j = await r.json();
+
+    if (!j.success) {
+      setMsg(j.error || 'Gagal mengirim OTP', 'crimson');
+      // re-enable if server says allowed
+      resendBtn.disabled = false;
+      return;
+    }
+
+    setMsg('OTP terkirim ✔ Cek inbox (atau spam).', 'green');
+
+    // update attempts and cooldown store
+    let attempts = 0;
+    if (cd && typeof cd.attempts === 'number') attempts = cd.attempts;
+    attempts = attempts + 1;
+
+    // compute cooldown duration in seconds
+    const cooldownSeconds = getCooldownDurationForAttempt(attempts - 1); // attemptIndex = attempts-1
+    const until = Date.now() + (cooldownSeconds * 1000);
+
+    writeCooldown(email, { attempts, until });
+
+    // start countdown
+    startCountdown(email);
+
+  } catch (e) {
+    console.error(e);
+    setMsg('Network error: ' + (e.message || ''), 'crimson');
+    resendBtn.disabled = false;
+  }
+});
+
+// verify handler
+document.getElementById('otpForm').addEventListener('submit', async (ev)=>{
+  ev.preventDefault();
+  if (!email) { setMsg('Email tidak tersedia', 'crimson'); return; }
+  const code = (otpInput.value || '').trim();
+
+  if (!/^\d{6}$/.test(code)) {
+    setMsg('Masukkan kode 6 digit yang valid', 'crimson');
+    return;
+  }
+
+  setMsg('Verifying...', 'black');
+  verifyBtn.disabled = true;
+
+  try {
+    const r = await fetch('/auth/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, code })
+    });
+    const j = await r.json();
+    if (!j.success) {
+      setMsg(j.error || 'Gagal memverifikasi', 'crimson');
+      verifyBtn.disabled = false;
+      return;
+    }
+
+    // success: clear pending email and any cooldown record
+    localStorage.removeItem('pending_email');
+    clearCooldown(email);
+
+    setMsg('Verifikasi berhasil — silakan login', 'green');
+    setTimeout(()=> { location.href = '/user/login.html'; }, 900);
+
+  } catch (e) {
+    console.error(e);
+    setMsg('Network error: ' + (e.message || ''), 'crimson');
+    verifyBtn.disabled = false;
+  }
+});
+
+// convenience: allow pressing Enter in OTP field to submit
+otpInput.addEventListener('keydown', (e)=>{
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('otpForm').dispatchEvent(new Event('submit', {cancelable:true}));
+  }
+});
+</script>
+</body>
+</html>
