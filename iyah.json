@@ -1,0 +1,43 @@
+{
+  "categories": [
+    {
+      "name": "AI",
+      "items": [
+        {
+          "name": "ai4chat",
+          "path": "/ai/ai4chat/chat?text=",
+          "desc": "Proxy to nekorinn ai4chat (text is REQUIRED).",
+          "status": "ready",
+          "params": {
+            "text": {
+              "description": "Text / prompt to send to ai4chat (required)",
+              "required": true
+            }
+          },
+          "category": "AI"
+        }
+      ]
+    },
+    {
+      "name": "RANDOM",
+      "items": [
+        {
+          "name": "random_blue_archive",
+          "path": "/random/blue_archive",
+          "desc": "",
+          "status": "ready",
+          "params": {},
+          "category": "RANDOM"
+        },
+        {
+          "name": "random_waguri",
+          "path": "/random/waguri",
+          "desc": "",
+          "status": "ready",
+          "params": {},
+          "category": "RANDOM"
+        }
+      ]
+    }
+  ]
+}
