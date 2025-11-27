@@ -1093,8 +1093,27 @@ el('searchInput').addEventListener('input', (e)=>{
 });
 
 /* initialize */
-(async function init(){ showLoading(); try{ const r = await fetch('/iyah.json'); if(!r.ok) throw new Error('no'); apiData = await r.json(); renderApis(); updateStats(); }catch(e){ el('apiList').innerHTML='<div class="text-center text-red-400">Gagal memuat iyah.json</div>'; console.error(e);} finally{ hideLoading(); } })();
-
+(async function init(){ 
+  showLoading(); 
+  try{ 
+    // tambah timestamp untuk bypass cache
+    const timestamp = new Date().getTime();
+    const r = await fetch('/iyah.json?t=' + timestamp); 
+    if(!r.ok) throw new Error('Failed to fetch iyah.json: ' + r.status); 
+    apiData = await r.json(); 
+    
+    // debug: log data
+    console.log('[init] iyah.json loaded:', apiData);
+    
+    renderApis(); 
+    updateStats(); 
+  }catch(e){ 
+    console.error('[init] error:', e);
+    el('apiList').innerHTML='<div class="text-center text-red-400">Gagal memuat iyah.json - ' + (e.message || e) + '</div>'; 
+  } finally{ 
+    hideLoading(); 
+  } 
+})();
 // Avatar + auth UI (client-side simple)
 const avatarBox = document.getElementById('avatarBox');
 const avatarImg = document.getElementById('avatarImg');
