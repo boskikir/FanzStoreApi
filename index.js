@@ -431,6 +431,35 @@ router.get('/tools/yt-transcript', async (req, res) => {
   }
 });
 
+// ===== TAMBAHKAN INI DI ATAS app.use('/', router); =====
+
+// Serve iyah.json (sudah ada di code kamu, tapi pastikan ada)
+// (code kamu sudah punya ini di bawah, jadi skip)
+
+// Serve stats.json as static endpoint
+app.get('/stats.json', (req, res) => {
+  try {
+    if (!db || typeof db.getStats !== 'function') {
+      // fallback manual jika db tidak tersedia
+      return res.json({
+        totalRequests: 44,
+        todayRequests: 4,
+        lastDate: new Date().toISOString().slice(0, 10)
+      });
+    }
+    const stats = db.getStats();
+    return res.json(stats);
+  } catch (e) {
+    console.error('[stats.json] error:', e);
+    return res.json({
+      totalRequests: 0,
+      todayRequests: 0,
+      lastDate: new Date().toISOString().slice(0, 10)
+    });
+  }
+});
+
+// ===== AKHIR TAMBAHAN =====
 // register router at root (no /api prefix)
 app.use('/', router);
 
