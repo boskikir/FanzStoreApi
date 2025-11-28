@@ -4,8 +4,8 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "dev": "node index.js",
-    "start": "node index.js",
+    "dev": "node /api/index.js",
+    "start": "node /api/index.js",
     "geniyah": "node scripts/generate_iyah.js",
     "build": "node scripts/generate_iyah.js",
     "vercel-build": "node scripts/generate_iyah.js && echo 'iyah.json generated'"
