@@ -1,12 +1,14 @@
 {
-  "name": "FanzSotre",
+  "name": "FanzStore",
   "version": "1.0.0",
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
     "dev": "node index.js",
     "start": "node index.js",
-    "geniyah": "node scripts/generate_iyah.js"
+    "geniyah": "node scripts/generate_iyah.js",
+    "build": "node scripts/generate_iyah.js",
+    "vercel-build": "node scripts/generate_iyah.js && echo 'iyah.json generated'"
   },
   "dependencies": {
     "@google/genai": "^0.13.0",
