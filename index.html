@@ -1,0 +1,1090 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>FanzStore Dev</title>
+  <!-- Embedded SVG favicon (data URI) - reliable untuk testing -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20100%20100'%3E%3Crect%20fill='%230a0a0a'%20width='100'%20height='100'/%3E%3Ctext%20x='50'%20y='60'%20font-size='50'%20fill='%2300eaff'%20text-anchor='middle'%20font-family='Arial'%20font-weight='700'%3EFS%3C/text%3E%3C/svg%3E">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{ --bg-dark:#0a0a0a; --panel:rgba(20,20,20,0.85); --muted:#9ca3af; }
+html,body{height:100%}
+body{ margin:0; font-family:'Space Grotesk',system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial; background:linear-gradient(135deg,var(--bg-dark) 0%, #131313 100%); color:#e6e6e6; }
+.code-font{font-family:'JetBrains Mono',ui-monospace,monospace}
+
+/* Cards (no box-shadow per request) */
+.glow-card{
+  background:linear-gradient(180deg, rgba(24,24,24,0.95), rgba(14,14,14,0.9));
+  border:1px solid rgba(255,255,255,0.03);
+  backdrop-filter: blur(6px);
+  box-shadow: none !important;
+  border-radius:12px;
+}
+
+/* small UI bits */
+/* ---------- Button style for copy path / copy full ---------- */
+/* paste ini menggantikan .pill-tag lama */
+.pill-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  color: inherit;
+  border-radius: 10px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  transition: transform .12s ease, background .12s ease, box-shadow .12s ease;
+  position: relative;
+  overflow: hidden; /* untuk pseudo-ripple */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* hover / focus */
+.pill-tag:hover {
+  background: rgba(255,255,255,0.06);
+  transform: translateY(-2px);
+}
+
+/* active (mouse down) */
+.pill-tag:active {
+  transform: translateY(0) scale(.985);
+}
+
+/* subtle pressed class (JS bisa toggle .pressed jika sudah ada) */
+.pill-tag.pressed {
+  transform: scale(.98);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12) inset;
+}
+
+/* CSS-only ripple (centered) using pseudo-element */
+.pill-tag::after{
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(255,255,255,0.12);
+  transform: translate(-50%, -50%) scale(0);
+  border-radius: 50%;
+  opacity: 0;
+  transition: width .35s ease, height .35s ease, opacity .35s ease, transform .35s ease;
+  pointer-events: none;
+}
+
+/* when button is active, animate pseudo-ripple */
+.pill-tag:active::after {
+  width: 300%;
+  height: 300%;
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  transition: width .45s cubic-bezier(.2,.9,.2,1), height .45s cubic-bezier(.2,.9,.2,1), opacity .45s linear;
+}
+
+/* light-theme adjustments so contrast tetap oke */
+body.light .pill-tag {
+  background: rgba(0,0,0,0.04);
+  border-color: rgba(0,0,0,0.06);
+}
+body.light .pill-tag:hover { background: rgba(0,0,0,0.06); }
+body.light .pill-tag::after { background: rgba(0,0,0,0.08); }
+
+/* ensure text doesn't wrap and stays compact */
+.copy-path, .copy-full {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* tiny focus outline for accessibility */
+.pill-tag:focus {
+  outline: 2px solid rgba(16,185,129,0.12);
+  outline-offset: 2px;
+  }
+.endpoint-badge{ background:linear-gradient(135deg,#666,#444); color:white; font-weight:700; padding:4px 10px; border-radius:8px; font-size:11px; }
+
+.loading-overlay{ display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:80; align-items:center; justify-content:center }
+.loading-overlay.active{ display:flex }
+.spinner{ width:36px; height:36px; border:3px solid rgba(255,255,255,0.08); border-top-color:#9ca3af; border-radius:50%; animation:spin .8s linear infinite; }
+@keyframes spin{ to{ transform:rotate(360deg) } }
+
+.stat-big{ font-size:28px; font-weight:700 }
+.stat-label{ font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em }
+
+/* chevron button replacing "Try" */
+.chev-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:36px;
+  height:36px;
+  border-radius:8px;
+  background:transparent;
+  border:1px solid rgba(255,255,255,0.04);
+  cursor:pointer;
+  padding:0;
+}
+.chev-icon{
+  display:inline-block;
+  font-size:16px;
+  line-height:1;
+  transition:transform .18s ease;
+}
+
+/* chevron untuk kategori (folder) — text toggle */
+.cat-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.cat-chevron {
+  font-size: 18px;
+  display: inline-block;
+  transition: transform .20s ease;
+  line-height: 1;
+}
+
+/* ===============================
+   SEARCH / INPUT STYLES (requested)
+   - search-wrap always visible
+   - strip wider
+   - inputs have boxed background like search
+   =============================== */
+
+/* search area border highlight - always visible, no shadow per request */
+.search-wrap {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  background:rgba(255,255,255,0.02);
+  padding:8px;
+  border-radius:10px;
+  border:1px solid rgba(255,255,255,0.04);
+  box-shadow:none;
+}
+
+.search-wrap input {
+  border: 1px solid rgba(255,255,255,0.20);
+  padding:10px 12px;
+  border-radius:8px;
+  background: rgba(255,255,255,0.08);
+  width:100%;
+  outline:none;
+  transition: border-color .12s, background .12s;
+}
+
+/* Light mode adjustments for search input */
+body.light .search-wrap input {
+  background: rgba(0,0,0,0.06);
+  border-color: rgba(0,0,0,0.25);
+}
+
+.search-wrap input:focus {
+  border-color: rgba(156,156,156,0.25);
+}
+
+/* strip line always visible and bigger per request */
+.search-strip{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  height:18px;
+  margin:12px 0 16px;
+}
+
+.search-strip .line{
+  width:160px;
+  height:4px;
+  border-radius:4px;
+  background:#ffffff;
+}
+
+/* light theme: black line */
+body.light .search-strip .line {
+  background:#000000;
+}
+
+/* ===============================
+   GLOBAL INPUT / TEXTAREA BOX
+   - All inputs/textarea have boxed background (same look as search)
+   =============================== */
+input[type="text"],
+input[type="number"],
+input[type="password"],
+textarea {
+  border: 1px solid rgba(255,255,255,0.20);
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.08);
+  width: 100%;
+  outline: none;
+  color: inherit;
+  transition: border-color .12s, background .12s;
+}
+
+/* FOCUS */
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="password"]:focus,
+textarea:focus {
+  border-color: rgba(255,255,255,0.35);
+}
+
+/* MODE LIGHT for inputs */
+body.light input[type="text"],
+body.light input[type="number"],
+body.light input[type="password"],
+body.light textarea {
+  background: rgba(0,0,0,0.06);
+  border-color: rgba(0,0,0,0.25);
+}
+
+/* endpoint block (inside try-area) */
+.endpoint-block { border-radius:8px; padding:10px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.03); margin-bottom:8px; }
+.endpoint-block .api-path { display:block; margin-top:6px; font-family: 'JetBrains Mono', monospace; font-size:13px; color: #d1d1d1; }
+
+/* ===============================
+   TRY-AREA inputs follow global style (no transparent override)
+   - ensures inputs inside try-area look identical to search
+   =============================== */
+.try-area input,
+.try-area textarea,
+.try-area select {
+  /* follow global boxed style */
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.20);
+  padding:10px;
+  border-radius:8px;
+  color: inherit;
+  transition: border-color .12s, background .12s;
+}
+
+/* focus in try-area */
+.try-area input:focus,
+.try-area textarea:focus,
+.try-area select:focus {
+  border-color: rgba(156,156,156,0.25);
+}
+
+/* Light mode override in try-area */
+body.light .try-area input,
+body.light .try-area textarea,
+body.light .try-area select {
+  background: rgba(0,0,0,0.06);
+  border-color: rgba(0,0,0,0.25);
+}
+
+
+/* response scroll */
+.response-scroll{ overflow:auto; white-space:pre; }
+
+/* ===============================
+   GLOBAL TICK / NOTIFICATION (copy / error)
+   - positioned under theme toggle (top-right)
+   - animate slide in/out horizontally
+   =============================== */
+#globalTick {
+  position:fixed;
+  top:56px; /* below theme toggle */
+  right:12px;
+  display:none;
+  color:white;
+  padding:10px 14px;
+  border-radius:10px;
+  font-size:15px;
+  font-weight:700;
+  box-shadow:0 8px 20px rgba(0,0,0,0.55);
+  z-index:999999;
+  white-space:nowrap;
+  transform: translateX(24px);
+  opacity:0;
+  transition: transform .22s cubic-bezier(.2,.9,.2,1), opacity .18s linear, background .12s;
+}
+#globalTick.show {
+  display:block;
+  transform: translateX(0);
+  opacity:1;
+}
+#globalTick.success { background: #10b981; }
+#globalTick.error { background: #ef4444; }
+
+/* status colors */
+.status-ready { background: rgba(16,185,129,0.08); color: #10b981; border:1px solid rgba(16,185,129,0.15); padding:6px 8px; border-radius:8px; font-weight:600; font-size:12px; }
+.status-error { background: rgba(239,68,68,0.08); color: #ef4444; border:1px solid rgba(239,68,68,0.15); padding:6px 8px; border-radius:8px; font-weight:600; font-size:12px; }
+.status-update { background: rgba(234,179,8,0.08); color: #f59e0b; border:1px solid rgba(234,179,8,0.15); padding:6px 8px; border-radius:8px; font-weight:600; font-size:12px; }
+
+/* small error message */
+.error-message { color:#fb7185; font-size:12px; margin-top:6px; }
+
+/* footer full-width strip (above copyright) */
+.footer-full-strip { width:100%; height:2px; background:rgba(255,255,255,0.06); margin-top:28px; margin-bottom:8px; }
+body.light .footer-full-strip { background:#000; }
+
+/* footer line (kept small) */
+.footer-line{ height:1px; background:rgba(255,255,255,0.04); margin-top:12px; margin-bottom:12px }
+
+@media (min-width:768px){ .container{ padding-left:32px; padding-right:32px } }
+
+/* Light mode */
+body.light{ background:linear-gradient(135deg,#fff,#f3f4f6); color:#0b1220 }
+body.light .glow-card{ background:linear-gradient(180deg,#fff,#f7f7f7); border:1px solid rgba(0,0,0,0.06) }
+
+  /* === RESPONSE TITLE THEME === */
+.response-title {
+  color: #e5e7eb;
+}
+body.light .response-title {
+  color: #111827;
+}
+
+
+
+/* ==== cURL FIX (compact + warna + wrap aman) ==== */
+.curl-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;              /* jarak kecil antar elemen */
+  margin-top: 6px;       /* jarak dari bagian atas (rapat tapi ada spasi) */
+  padding-top: 0;
+}
+
+/* judul cURL (paksa warna agar tidak tertimpa) */
+.curl-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #9ca3af !important;   /* warna judul (ikon + teks) */
+  margin: 0;                   /* rapatkan */
+  padding: 0;
+  line-height: 1.1;
+}
+
+/* override khusus untuk tema terang */
+body.light .curl-title {
+  color: #374151 !important;
+}
+
+/* kurangi/hilangkan margin default pada code/pre */
+.curl-box code,
+.curl-box pre {
+  margin: 0 !important;
+  padding: 0 !important;
+  display: block;
+}
+
+/* wrapper teks cURL: beri background tipis dan rapihkan */
+.curl-body {
+  overflow-x: auto;
+  padding: 8px;               /* cukup kecil agar tidak terasa kosong */
+  border-radius: 8px;
+  max-width: 100%;
+  background: rgba(0,0,0,0.10);
+  /* untuk light mode background lebih terang */
+}
+body.light .curl-body { background: rgba(0,0,0,0.08); }
+
+/* teks utama cURL: monospace + wrap rapat */
+.curl-text {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: pre-wrap;      /* izinkan wrap */
+  word-break: break-word;     /* pecah kata terlalu panjang */
+  margin: 0;
+  padding: 0;
+  display: block;
+  color: inherit;
+}
+
+/* tambahkan garis tipis pemisah jika ingin (opsional) */
+.curl-box::before {
+  content: "";
+  height: 1px;
+  background: rgba(255,255,255,0.06);
+  margin-top: 6px;
+  margin-bottom: 4px;
+  border-radius: 2px;
+}
+
+/* jika mau judul cURL terlihat "ikon hijau" atau style lain, atur di sini */
+/* .curl-title { color: #10b981 !important; } */
+
+  /* === Response api mengikuti style cURL body === */
+.response-scroll {
+  background: rgba(0,0,0,0.10);   /* sama seperti curl-body */
+  padding: 10px;
+  border-radius: 8px;
+}
+
+body.light .response-scroll {
+  background: rgba(0,0,0,0.08);   /* versi light */
+}
+
+/* ===== Divider atas cURL ===== */
+.divider {
+  width: 100%;
+  height: 1px;
+  background: rgba(255,255,255,0.35); /* tema gelap → putih */
+  margin: 6px 0 8px 0;
+}
+
+/* tema terang → hitam */
+body.light .divider {
+  background: rgba(0,0,0,0.45);
+}
+  
+/*====== api-path styles (fixed bounded) ======*/
+
+.api-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;        /* BATAS LEBAR */
+  overflow-x: auto;        /* scroll kalau kepanjangan */
+  white-space: nowrap;     /* cegah turun ke bawah */
+  scrollbar-width: none;   /* hide scrollbar (Firefox) */
+}
+
+.api-path::-webkit-scrollbar { 
+  display: none;           /* hide scrollbar (Chrome) */
+}
+
+.api-path .short-path { 
+  background: rgba(255,255,255,0.02);
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: #e5e7eb;
+  font-size:0.95rem;
+}
+
+.api-path .full-path {
+  display: inline-block;
+  background: rgba(255,255,255,0.02);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #e5e7eb;
+}
+
+.api-path .full-path.hidden { 
+  display: none; 
+}
+
+/* mode light */
+body.light .api-path .short-path { 
+  background: rgba(0,0,0,0.04); 
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: #111827; 
+  font-size:0.95rem;
+}
+
+body.light .api-path .full-path { 
+  background: rgba(0,0,0,0.04); 
+  color: #111827;  
+}
+  
+</style>
+</head>
+<body>
+  <!-- mode overlay used for theme animation -->
+  <div id="modeOverlay" aria-hidden="true" style="position:fixed;top:0;right:0;z-index:90;pointer-events:none"></div>
+
+  <!-- theme toggle top-right -->
+  <div style="position:fixed;top:12px;right:12px;z-index:110">
+    <button id="themeToggle" class="glow-card" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.03)">
+      <span id="themeIcon">🌙</span>
+    </button>
+    <!-- moved under theme as requested -->
+    <div id="globalTick" class="success">✓ copied to clipboard</div>
+  </div>
+
+  <!-- loading overlay -->
+  <div id="loadingOverlay" class="loading-overlay"><div class="spinner"></div></div>
+
+  <main class="container max-w-6xl mx-auto px-4 py-8">
+    <!-- header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-3xl md:text-4xl font-extrabold">FanzStore Dev</h1>
+        <p class="text-sm text-gray-400 mt-1">Kumpulan Api Endpoin</p>
+      </div>
+    </div>
+
+    <!-- stats boxes (separate, side-by-side) -->
+    <section class="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div class="glow-card rounded-xl p-5 flex items-center justify-between">
+        <div>
+          <div class="stat-label">Total Endpoints</div>
+          <div class="stat-big" id="statEndpoints">—</div>
+        </div>
+        <div class="text-right">
+          <div class="text-sm text-gray-400">Categories</div>
+          <div class="font-semibold" id="statCategories">—</div>
+        </div>
+      </div>
+
+      <div class="glow-card rounded-xl p-5 flex items-center justify-between">
+        <div>
+          <div class="stat-label">Total Requests</div>
+          <div class="stat-big" id="statTotalReq"></div>
+        </div>
+        <div class="text-right">
+          <div class="text-sm text-gray-400">Today Requests</div>
+          <div class="font-semibold" id="statTodayReq"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- search area with bigger strip -->
+    <div class="search-strip"><div class="line"></div></div>
+    <section class="mb-6">
+      <div class="search-wrap glow-card p-3">
+        <div style="font-size:20px">🔎</div>
+        <input id="searchInput" type="search" placeholder="Search..." class="code-font" />
+      </div>
+    </section>
+
+    <!-- API list -->
+    <section id="apiListContainer">
+      <div id="apiList" class="space-y-4"></div>
+    </section>
+
+    <div id="noResults" class="text-center text-sm text-gray-400 mt-8 hidden">No endpoints found</div>
+
+    <!-- full-width strip above footer -->
+    <div class="footer-full-strip" aria-hidden="true"></div>
+
+    <div class="footer-line"></div>
+    <div class="mt-2 text-center text-xs text-gray-400"><h7>Pembuat</h7>
+    <li>Fatih</li>
+    </div>
+    <footer class="mt-2 text-center text-xs text-gray-400">© 2025 FanzStore Dev</footer>
+  </main>
+
+<script>
+
+  
+// showNotif: tampilkan globalTick (sama posisi/animasi copy)
+function showNotif(type = "success", message = "") {
+  const el = document.getElementById("globalTick");
+  if (!el) return;
+  el.classList.remove("success", "error");
+  if (type === "error") el.classList.add("error");
+  else el.classList.add("success");
+
+  el.textContent = message || (type === "error" ? "✗ Gagal" : "✓ Berhasil");
+
+  // slide in (from right)
+  el.style.display = "block";
+  requestAnimationFrame(() => {
+    el.style.transform = "translateX(0)";
+    el.style.opacity = "1";
+  });
+
+  // auto hide after 1.6s (same timing as copy)
+  setTimeout(() => {
+    el.style.opacity = "0";
+    el.style.transform = "translateX(24px)";
+  }, 1600);
+
+  setTimeout(() => {
+    // fully hide after transition
+    el.style.display = "none";
+  }, 2000);
+}
+
+// OPTIONAL: short beep using WebAudio (no external file)
+// enable by setting playSound = true
+const playSound = false;
+function playBeep(ok = true) {
+  if (!playSound) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = ok ? 'sine' : 'triangle';
+    o.frequency.value = ok ? 880 : 220; // success higher, error lower
+    g.gain.value = 0.0001;
+    o.connect(g);
+    g.connect(ctx.destination);
+    o.start();
+    // ramp up small volume quickly
+    g.gain.exponentialRampToValueAtTime(0.02, ctx.currentTime + 0.01);
+    // stop after 160ms
+    setTimeout(() => {
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.05);
+      o.stop(ctx.currentTime + 0.06);
+      try { ctx.close(); } catch(e){}
+    }, 160);
+  } catch (e) { /* ignore */ }
+}
+
+  
+/* ---------- config & helpers ---------- */
+const BASE = window.location.origin;
+let apiData = null;
+const el = id => document.getElementById(id);
+function showLoading(){ el('loadingOverlay').classList.add('active') }
+function hideLoading(){ el('loadingOverlay').classList.remove('active') }
+
+/* theme handling: animate quarter-circle overlay */
+const themeToggle = el('themeToggle');
+const themeIcon = el('themeIcon');
+function applyTheme(t){ if(t==='light'){ document.body.classList.add('light'); themeIcon.textContent='☀️' } else { document.body.classList.remove('light'); themeIcon.textContent='🌙' } }
+const saved = localStorage.getItem('theme') || 'dark';
+applyTheme(saved);
+const overlay = el('modeOverlay');
+function animateThemeSwitch(newTheme){
+  overlay.style.background = (newTheme === 'light') ? '#ffffff' : '#000000';
+  overlay.style.clipPath = 'circle(0 at 100% 0)';
+  void overlay.offsetWidth;
+  overlay.style.clipPath = 'circle(150% at 100% 0)';
+  setTimeout(()=>{ overlay.style.clipPath = 'circle(0 at 100% 0)'; }, 450);
+}
+themeToggle.addEventListener('click', ()=>{
+  const now = localStorage.getItem('theme') || 'dark';
+  const next = now === 'dark' ? 'light' : 'dark';
+  animateThemeSwitch(next);
+  localStorage.setItem('theme', next);
+  applyTheme(next);
+});
+
+/* normalize path: remove leading /api/ so UI shows /random/... not /api/random/... */
+function normalizePath(p){
+  if(!p) return '';
+  try{ if(/^https?:\/\//.test(p)){ const u=new URL(p); p = u.pathname + (u.search||'') } }catch(e){}
+  p = p.replace(/^\/api\//,'/');
+  return p;
+}
+
+/* render categories & endpoints */
+function renderApis(){
+  if(!apiData || !Array.isArray(apiData.categories)){ el('apiList').innerHTML = '<div class="text-center text-gray-400">No endpoints defined</div>'; return }
+  const container = el('apiList'); container.innerHTML='';
+  apiData.categories.forEach((cat,ci)=>{
+    const folderCard = document.createElement('div');
+    folderCard.className='glow-card rounded-xl overflow-hidden';
+    folderCard.innerHTML = `
+<button class="w-full px-4 py-3 flex items-center justify-between cat-btn" data-ci="${ci}">
+  <div class="flex items-center gap-3">
+    <div class="text-2xl">📁</div>
+    <div class="text-left">
+      <div class="font-semibold">${cat.name}</div>
+      <div class="text-sm text-gray-400">${cat.items.length} endpoints</div>
+    </div>
+  </div>
+  <span class="cat-chevron">▶</span>
+</button>
+      <div class="hidden border-t border-white/5 p-3 space-y-3"></div>
+    `;
+    container.appendChild(folderCard);
+    const body = folderCard.querySelector('div.hidden');
+
+    (cat.items||[]).forEach(it=>{
+      const pathRaw = it.path || '/';
+      const canonical = normalizePath(pathRaw).split('?')[0];
+      const params = it.params?Object.keys(it.params):[];
+
+      // determine status class
+      let statusClass = 'status-ready';
+      const st = (it.status||'ready').toString().toLowerCase();
+      if(st === 'ready') statusClass = 'status-ready';
+      else if(st === 'update' || st === 'updating') statusClass = 'status-update';
+      else statusClass = 'status-error';
+
+      const card = document.createElement('div');
+      card.className='border border-white/4 rounded-lg p-3';
+      card.innerHTML = `
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-start gap-3 min-w-0">
+            <div class="endpoint-badge mr-2">GET</div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-3">
+                <div class="code-font font-semibold text-sm truncate">${canonical}</div>
+                <div class="pill-tag ${statusClass} text-xs">${it.status || 'ready'}</div>
+              </div>
+              <div class="text-xs text-gray-400 mt-1">${it.name||''}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <!-- removed tiny top copy per request; keep only chevron -->
+            <button class="chev-btn" title="Toggle details">
+              <span class="chev-icon">▶</span>
+            </button>
+          </div>
+        </div>
+        <div class="mt-3 hidden try-area">
+          <!-- ENDPOINT BLOCK: only visible inside try-area -->
+          <div class="endpoint-block">
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <div style="font-weight:600">🔗 Endpoint</div>
+    <div class="flex gap-2">
+      <button type="button" class="px-3 py-1 rounded-md pill-tag text-xs copy-path">Copy Path</button>
+      <button type="button" class="px-3 py-1 rounded-md pill-tag text-xs copy-full">Copy Full URL</button>
+    </div>
+  </div>
+  <div class="api-path code-font">
+    <span class="short-path">${canonical}</span>
+    <span class="full-path hidden" style="margin-left:8px; font-size:0.95rem;"></span>
+  </div>
+</div>
+            
+
+          <div class="text-xs text-gray-400 mb-2">${(it.desc||'')}</div>
+          <form class="space-y-2 code-font">
+            ${
+              params.map(p=>{
+                const rawDef = (it.params && it.params[p]);
+                const def = (rawDef && typeof rawDef === 'object') ? rawDef : null;
+                const placeholder = def ? (def.placeholder || '') : (typeof rawDef === 'string' ? rawDef : '');
+                const isTextAutoRequired = (!def && p === 'text');
+                const requiredAttr = (def && def.required) || isTextAutoRequired ? 'required' : '';
+                const requiredMark = (def && def.required) || isTextAutoRequired ? '<span class="text-red-400 ml-1">*</span>' : '';
+                return `<div>
+                          <label class="text-xs text-gray-400">${p} ${requiredMark}</label>
+                          <input name="${p}" ${requiredAttr} class="w-full px-3 py-2 rounded bg-transparent text-sm" placeholder="${placeholder}" />
+                        </div>`;
+              }).join('')
+            }
+            <div class="flex gap-2">
+              <button type="submit" class="px-3 py-2 rounded bg-gradient-to-r from-gray-600 to-gray-500 text-white text-sm">Execute</button>
+              <button type="button" class="px-3 py-2 rounded bg-white/5 text-sm clear-btn">Clear</button>
+            </div>
+          </form>
+          <div class="response mt-3 hidden api-response code-font">
+            <!-- PEMBATAS (divider) -->
+  <div class="divider"></div>
+  <div class="response-title text-base font-semibold mb-1 flex items-center gap-1">
+  📃 Response
+</div>
+  <div class="response-scroll"></div>
+</div>
+          <div class="curl-box hidden">
+  <!-- PEMBATAS (divider) -->
+  <div class="divider"></div>
+  <div class="curl-title">📟 cURL command</div>
+  <div class="curl-body">
+    <code class="curl-text"></code>
+  </div>
+</div>
+        </div>
+      `;
+      body.appendChild(card);
+
+      // copy buttons inside endpoint-block
+      const copyPathBtn = card.querySelector('.copy-path');
+      const copyFullBtn = card.querySelector('.copy-full');
+      copyPathBtn?.addEventListener('click', async () => {
+  const shortEl = card.querySelector('.short-path');
+  const txt = shortEl ? shortEl.textContent.trim() : canonical;
+  const ok = await copyToClipboard(txt);
+  if (ok) flashGlobalTick(true, '✓ copied to clipboard');
+  else flashGlobalTick(false, '✖ copy failed');
+});
+
+copyFullBtn?.addEventListener('click', async () => {
+  const fullEl = card.querySelector('.full-path');
+  // jika full displayed (atau ada), copy itu, kalau belum -> fallback canonical with BASE
+  let txt = '';
+  if (fullEl && !fullEl.classList.contains('hidden') && fullEl.textContent.trim()) {
+    txt = fullEl.textContent.trim();
+  } else {
+    txt = (canonical.startsWith('http') ? canonical : (BASE + canonical));
+  }
+  const ok = await copyToClipboard(txt);
+  if (ok) flashGlobalTick(true, '✓ copied to clipboard');
+  else flashGlobalTick(false, '✖ copy failed');
+});
+
+      // chevron toggle (replacing Try) — show endpoint-block + form etc
+      const chevBtn = card.querySelector('.chev-btn');
+      const chevIcon = card.querySelector('.chev-icon');
+
+      chevBtn.addEventListener('click', ()=>{
+        const ta = card.querySelector('.try-area');
+        const wasHidden = ta.classList.contains('hidden');
+        ta.classList.toggle('hidden');
+        // set the icon text
+        chevIcon.textContent = wasHidden ? '▼' : '▶';
+      });
+
+      // execute form -> show cURL and response (use full URL)
+      const form = card.querySelector('form');
+form?.addEventListener('submit', async (ev)=>{
+  ev.preventDefault();
+
+  // validasi client-side untuk input required (menampilkan pesan custom jika ada)
+  const requiredInputs = Array.from(form.querySelectorAll('input[required], textarea[required], select[required]'));
+  for (const ri of requiredInputs) {
+    if (!String(ri.value || '').trim()) {
+      let em = ri.parentElement.querySelector('.error-message');
+      if (!em) { em = document.createElement('div'); em.className='error-message'; ri.parentElement.appendChild(em); }
+      const paramName = ri.getAttribute('name');
+      const def = (it.params && it.params[paramName] && typeof it.params[paramName] === 'object') ? it.params[paramName] : null;
+      em.textContent = (def && def.message) ? def.message : 'Field wajib diisi';
+      ri.focus();
+      // show error notif juga
+      flashGlobalTick(false, '✖ field belum lengkap');
+      return;
+    }
+  }
+
+  const responseBox = card.querySelector('.response');
+  const responseScroll = responseBox.querySelector('.response-scroll');
+  const curlBox = card.querySelector('.curl-box');
+  const curlTextEl = card.querySelector('.curl-text');
+  responseBox.classList.remove('hidden');
+  responseScroll.innerHTML = '<div style="display:flex;align-items:center;gap:8px"><div class="spinner" style="width:18px;height:18px;border-width:2px;border-top-color:#9ca3af"></div><div>Requesting...</div></div>';
+  curlBox.classList.add('hidden');
+
+  try {
+    const fd = new FormData(form);
+    const qs = new URLSearchParams();
+    for(const [k,v] of fd.entries()) if(v) qs.append(k,v);
+    const url = `${canonical}${qs.toString()?('?'+qs.toString()):''}`;
+    const full = url.startsWith('http')? url : (BASE + url);
+
+
+    // tampilkan cURL
+    // build single-line curl, hapus newline dan ekstra whitespace
+const curlLine = (`curl -X GET "${full}"`)
+  .replace(/[\r\n]+/g, ' ')   // buang newline
+  .replace(/\s{2,}/g, ' ')    // gabung multiple spaces
+  .trim();
+
+// set aman ke element (textContent => aman dari HTML injection)
+curlTextEl.textContent = curlLine;
+
+// pastikan wrapper cURL dikonfigurasi agar bisa wrap
+curlTextEl.style.whiteSpace = 'pre-wrap';
+curlTextEl.style.wordBreak = 'break-word';
+curlTextEl.style.display = 'block';
+
+// tampilkan box cURL hanya setelah kita set teksnya
+curlBox.classList.remove('hidden');
+
+// --- PREPARE FULL ENDPOINT PATH (keep hidden until success) ---
+try {
+  const fullPathEl = card.querySelector('.full-path');
+  if (fullPathEl) {
+    const displayFull = full.startsWith('http') ? full : (BASE + full);
+    // simpan versi penuh di dataset, tapi jangan tampilkan sekarang
+    fullPathEl.dataset.full = displayFull;
+    fullPathEl.classList.add('hidden'); // pastikan hidden sampai request sukses
+  }
+} catch (e) {}
+
+    const r = await fetch(full);
+    if (!r.ok) {
+      // === on error: sembunyikan full-path, kembalikan short-path ===
+try {
+  const shortEl = card.querySelector('.short-path');
+  const fullEl  = card.querySelector('.full-path');
+  if (shortEl) shortEl.classList.remove('hidden');
+  if (fullEl) { fullEl.textContent = ''; fullEl.classList.add('hidden'); }
+} catch(e){}
+      const msg = 'HTTP '+r.status;
+      responseScroll.innerHTML = `<pre class="code-font">Error: ${msg}</pre>`;
+      flashGlobalTick(false, '✖ request failed');
+      playBeep(false);
+// === on error: sembunyikan full-path, kembalikan short-path ===
+try {
+  const shortEl = card.querySelector('.short-path');
+  const fullEl  = card.querySelector('.full-path');
+  if (shortEl) shortEl.classList.remove('hidden');
+  if (fullEl) { fullEl.textContent = ''; fullEl.classList.add('hidden'); }
+} catch(e){}
+      return;
+    }
+
+    const ct = r.headers.get('content-type')||'';
+    if (ct.includes('application/json')) {
+   // SETELAH REQUEST BERHASIL  
+const fullPathEl = card.querySelector('.full-path');  
+if (fullPathEl && fullPathEl.dataset.full) {  
+  fullPathEl.textContent = fullPathEl.dataset.full;  
+  }
+      
+      const j = await r.json();
+      responseScroll.innerHTML = `<pre class="code-font">${JSON.stringify(j,null,2)}</pre>`;
+    } else if (ct.startsWith('image/')) {
+      const blob = await r.blob(); const u = URL.createObjectURL(blob);
+      responseScroll.innerHTML = `<img src="${u}" class="max-w-full rounded" alt="img"/>`;
+    } else {
+      const t = await r.text();
+      responseScroll.innerHTML = `<pre class="code-font" style="white-space:pre">${t}</pre>`;
+    }
+// === Tampilkan full-path dan sembunyikan short-path (hanya setelah sukses) ===
+try {
+  const shortEl = card.querySelector('.short-path');
+  const fullEl  = card.querySelector('.full-path');
+  const displayFull = full.startsWith('http') ? full : (BASE + full);
+
+  if (fullEl) {
+    fullEl.textContent = displayFull;
+    fullEl.classList.remove('hidden');
+  }
+  if (shortEl) shortEl.classList.add('hidden');
+} catch (e) { /* ignore */ }
+    // sukses
+    flashGlobalTick(true, '✓ request berhasil');
+    playBeep(true);
+  } catch (e) {
+    responseScroll.innerHTML = `<pre class="code-font">Error: ${e.message||e}</pre>`;
+    flashGlobalTick(false, '✖ request failed');
+    playBeep(false);
+  }
+});
+
+     // clear action
+      card.querySelectorAll('.clear-btn').forEach(b=>b.addEventListener('click', ()=>{
+        const resp = card.querySelector('.response'); const respScroll = resp.querySelector('.response-scroll');
+        resp.classList.add('hidden'); respScroll.innerHTML='';
+        const curlBox = card.querySelector('.curl-box'); if(curlBox) curlBox.classList.add('hidden');
+        card.querySelectorAll('input').forEach(i=>i.value='');
+        // restore short/full path saat Clear ditekan
+const shortEl = card.querySelector('.short-path');
+const fullEl  = card.querySelector('.full-path');
+if (shortEl) shortEl.classList.remove('hidden');
+if (fullEl) { fullEl.textContent = ''; fullEl.classList.add('hidden'); }
+        // also reset try-area and chevron
+        const ta = card.querySelector('.try-area');
+        if(!ta.classList.contains('hidden')){
+          ta.classList.add('hidden');
+          card.querySelector('.chev-icon').textContent = '▶';
+        }
+      }));
+    });
+
+    // toggle category open/close (text toggle for chevron)
+    const btn = folderCard.querySelector('.cat-btn');
+    const chev = folderCard.querySelector('.cat-chevron');
+    const bodyEl = folderCard.querySelector('div.hidden');
+
+    btn.addEventListener('click', () => {
+      const closing = !bodyEl.classList.contains('hidden');
+      bodyEl.classList.toggle('hidden');
+      chev.textContent = closing ? '▶' : '▼';
+    });
+
+  });
+}
+
+/* copy helper + UI feedback */
+async function copyToClipboard(text){
+  try{
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    return true;
+  }catch(e){
+    console.error('copy failed', e);
+    return false;
+  }
+}
+/* flashGlobalTick(ok:boolean, message:string)
+   ok=true => success (green), ok=false => error (red)
+   animation: slide in from right -> out right
+*/
+function flashGlobalTick(ok=true, message='✓ copied to clipboard'){
+  const gt = document.getElementById('globalTick');
+  if(!gt) return;
+  gt.classList.toggle('success', !!ok);
+  gt.classList.toggle('error', !ok);
+  gt.textContent = message;
+  gt.style.display = 'block';
+  // start hidden position (slightly right)
+  gt.style.transform = 'translateX(24px)';
+  gt.style.opacity = '0';
+  // trigger transition
+  requestAnimationFrame(()=>{
+    gt.style.transform = 'translateX(0)';
+    gt.style.opacity = '1';
+  });
+  // hide after 1.2s with slide out to right
+  setTimeout(()=>{
+    gt.style.transform = 'translateX(24px)';
+    gt.style.opacity = '0';
+    setTimeout(()=>{ gt.style.display='none'; }, 220);
+  }, 1200);
+}
+
+  
+/* update stats numbers (tetap hitung endpoints/categories,
+   tapi ambil total/today dari /stats.json bila tersedia) */
+function updateStats(){
+  // tetap pakai apiData untuk endpoints/categories
+  if(!apiData || !Array.isArray(apiData.categories)) return;
+  const total = apiData.categories.reduce((s,c)=> s + (Array.isArray(c.items)?c.items.length:0), 0);
+  el('statEndpoints').textContent = total;
+  el('statCategories').textContent = apiData.categories.length;
+
+  // fallback values (lama) — digunakan jika /stats.json tidak tersedia
+  const fallbackTotal = (total * 1240);
+  const fallbackToday = (total * 12);
+
+  // sementara tampilkan fallback supaya tidak kosong saat fetch berlangsung
+  el('statTotalReq').textContent = fallbackTotal.toLocaleString();
+  el('statTodayReq').textContent = fallbackToday.toLocaleString();
+
+  // coba ambil stats.json (no-cache). Jika berhasil -> timpa tampilannya.
+  (async () => {
+    try {
+      const resp = await fetch('/stats.json', { cache: 'no-store' });
+      if (!resp.ok) throw new Error('no stats.json');
+      const stats = await resp.json();
+
+      const totalReq = (typeof stats.totalRequests === 'number') ? stats.totalRequests : fallbackTotal;
+      const todayReq = (typeof stats.todayRequests === 'number') ? stats.todayRequests : fallbackToday;
+
+      el('statTotalReq').textContent = totalReq.toLocaleString();
+      el('statTodayReq').textContent = todayReq.toLocaleString();
+    } catch (e) {
+      // silent fail: biarkan fallback tetap tampil
+      // console.warn('[stats] fallback used', e && e.message);
+    }
+  })();
+  }
+
+
+/* search behavior */
+el('searchInput').addEventListener('input', (e)=>{
+  const q = e.target.value.trim().toLowerCase();
+  document.querySelectorAll('#apiList .glow-card').forEach(card=>{
+    const name = card.querySelector('.font-semibold')?.textContent?.toLowerCase()||'';
+    const items = Array.from(card.querySelectorAll('.code-font')).map(n=>n.textContent.toLowerCase());
+    const match = name.includes(q) || items.some(it=>it.includes(q));
+    card.style.display = q? (match?'block':'none') : 'block';
+  });
+  const visible = document.querySelectorAll('#apiList .glow-card:not([style*="display: none"])').length;
+  el('noResults').classList.toggle('hidden', visible>0);
+});
+
+/* initialize */
+(async function init(){ showLoading(); try{ const r = await fetch('/iyah.json'); if(!r.ok) throw new Error('no'); apiData = await r.json(); renderApis(); updateStats(); }catch(e){ el('apiList').innerHTML='<div class="text-center text-red-400">Gagal memuat iyah.json</div>'; console.error(e);} finally{ hideLoading(); } })();
+
+
+</script>
+
+</body>
+</html>
