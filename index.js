@@ -44,6 +44,63 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Endpoint untuk melayani iyah.json secara dinamis
+app.get('/iyah.json', (req, res) => {
+  try {
+    const pluginsDir = path.join(__dirname, 'plugins');
+    const pluginFiles = fs.readdirSync(pluginsDir).filter(file => file.endsWith('.js'));
+    
+    const categories = {};
+    let totalEndpoints = 0;
+    
+    pluginFiles.forEach(file => {
+      try {
+        const plugin = require(`./plugins/${file}`);
+        const category = plugin.category || 'OTHER';
+        
+        if (!categories[category]) {
+          categories[category] = [];
+        }
+        
+        categories[category].push({
+          name: plugin.name,
+          path: plugin.path,
+          desc: plugin.desc || 'No description available',
+          method: plugin.method || 'get',
+          params: plugin.params || {},
+          status: 'ready',
+          category: category
+        });
+        
+        totalEndpoints++;
+      } catch (err) {
+        console.error(`Error loading plugin ${file}:`, err.message);
+      }
+    });
+    
+    const outputData = {
+      categories: Object.keys(categories).map(catName => ({
+        name: catName,
+        items: categories[catName]
+      })),
+      metadata: {
+        totalEndpoints: totalEndpoints,
+        totalCategories: Object.keys(categories).length,
+        generatedAt: new Date().toISOString()
+      }
+    };
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.json(outputData);
+  } catch (error) {
+    console.error('Error generating iyah.json:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate API documentation',
+      message: error.message 
+    });
+  }
+});
+
 
 // ========== USER & OTP FILES (AUTO CREATE) ==========
 
