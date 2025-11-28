@@ -5,9 +5,8 @@
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/index.js" },
-    { "src": "/iyah.json", "dest": "/public/iyah.json" },
-    { "src": "/stats.json", "dest": "/public/stats.json" },
-    { "src": "/user/(.*)", "dest": "/public/user/$1" },
-    { "src": "/(.*)", "dest": "/public/$1" }
+    { "src": "/iyah.json", "dest": "/iyah.json" },
+    { "src": "/stats.json", "dest": "/stats.json" },
+    { "src": "/user/(.*)", "dest": "/user/$1" }
   ]
 }
