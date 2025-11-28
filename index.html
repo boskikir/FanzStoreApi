@@ -1092,58 +1092,10 @@ el('searchInput').addEventListener('input', (e)=>{
   el('noResults').classList.toggle('hidden', visible>0);
 });
 
+
 /* initialize */
-(async function init(){ 
-  showLoading(); 
-  try{ 
-    // Hardcode data untuk testing
-    apiData = {
-      "categories": [
-        {
-          "name": "AI",
-          "items": [
-            {
-              "name": "ai4chat",
-              "path": "/ai/ai4chat/chat?text=",
-              "desc": "Proxy to nekorinn ai4chat (text is REQUIRED).",
-              "status": "ready",
-              "params": {
-                "text": {
-                  "description": "Text / prompt to send to ai4chat (required)",
-                  "required": true
-                }
-              },
-              "category": "AI"
-            }
-          ]
-        },
-        {
-          "name": "RANDOM",
-          "items": [
-            {
-              "name": "random_blue_archive",
-              "path": "/random/blue_archive",
-              "desc": "",
-              "status": "ready",
-              "params": {},
-              "category": "RANDOM"
-            },
-            {
-              "name": "random_waguri",
-              "path": "/random/waguri",
-              "desc": "",
-              "status": "ready",
-              "params": {},
-              "category": "RANDOM"
-            }
-          ]
-        }
-      ]
-    };
-    
-    renderApis(); 
-    updateStats(); 
-  }
+(async function init(){ showLoading(); try{ const r = await fetch('/iyah.json'); if(!r.ok) throw new Error('no'); apiData = await r.json(); renderApis(); updateStats(); }catch(e){ el('apiList').innerHTML='<div class="text-center text-red-400">Gagal memuat iyah.json</div>'; console.error(e);} finally{ hideLoading(); } })();
+
 // Avatar + auth UI (client-side simple)
 const avatarBox = document.getElementById('avatarBox');
 const avatarImg = document.getElementById('avatarImg');
