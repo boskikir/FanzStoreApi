@@ -1,12 +1,19 @@
 {
   "version": 2,
   "builds": [
-    { "src": "api/index.js", "use": "@vercel/node" }
+    {
+      "src": "index.js",
+      "use": "@vercel/node"
+    }
   ],
   "routes": [
-    { "src": "/api/(.*)", "dest": "/api/index.js" },
-    { "src": "/iyah.json", "dest": "/iyah.json" },
-    { "src": "/stats.json", "dest": "/stats.json" },
-    { "src": "/user/(.*)", "dest": "/user/$1" }
-  ]
+    {
+      "src": "/(.*)",
+      "dest": "/index.js"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
 }
+
